@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Routes, Route, Link, useParams, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, MapPin, Calendar, CheckCircle, Leaf, Euro, Zap, Menu, User, Filter, ShieldCheck, ArrowLeft, ArrowRight, Share2, Heart, Info, Clock, Building2, Users, X, Map as MapIcon, Grid, LogOut, Mail, Lock, Columns, ZoomIn } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -851,6 +851,63 @@ const UserDashboard = ({ user, userProfile }) => {
   const [activeTab, setActiveTab] = useState('guest'); // 'guest', 'host', 'messages', or 'profile'
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  
+  // Profile states
+  const [profileBio, setProfileBio] = useState(userProfile?.bio || '');
+  const [profileRole, setProfileRole] = useState(userProfile?.role || 'guest');
+  const [isSaving, setIsSaving] = useState(false);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (userProfile) {
+      setProfileBio(userProfile.bio || '');
+      setProfileRole(userProfile.role || 'guest');
+    }
+  }, [userProfile]);
+
+  const handlePhotoChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !user) return;
+    
+    setIsSaving(true);
+    try {
+      const storageRef = ref(storage, `profiles/${user.uid}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(snapshot.ref);
+      
+      await setDoc(doc(db, 'users', user.uid), {
+        photoURL: url,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      
+      alert("Photo de profil mise à jour !");
+      window.location.reload(); // To refresh the header and local state
+    } catch (err) {
+      console.error("Error uploading photo:", err);
+      alert("Erreur lors de l'upload de la photo.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    setIsSaving(true);
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        bio: profileBio,
+        role: profileRole,
+        email: user.email,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      alert("Profil mis à jour avec succès !");
+    } catch (err) {
+      console.error("Error saving profile:", err);
+      alert("Erreur lors de la mise à jour du profil.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -988,7 +1045,18 @@ const UserDashboard = ({ user, userProfile }) => {
                   <User size={40} />
                 )}
               </div>
-              <button className="text-sm font-bold text-brand-blue hover:underline">
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handlePhotoChange} 
+                className="hidden" 
+                accept="image/*"
+              />
+              <button 
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="text-sm font-bold text-brand-blue hover:underline"
+              >
                 Changer la photo
               </button>
             </div>
@@ -999,7 +1067,8 @@ const UserDashboard = ({ user, userProfile }) => {
                 className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-4 outline-none focus:border-brand-blue/30 transition-all resize-none"
                 rows="4"
                 placeholder="Dites-en plus sur vous..."
-                defaultValue={userProfile?.bio}
+                value={profileBio}
+                onChange={(e) => setProfileBio(e.target.value)}
               />
             </div>
 
@@ -1007,20 +1076,16 @@ const UserDashboard = ({ user, userProfile }) => {
               <label className="text-xs font-bold text-gray-400 uppercase">Rôle principal</label>
               <div className="grid grid-cols-2 gap-4">
                 <button 
-                  className={`py-4 rounded-2xl font-bold border-2 transition-all ${userProfile?.role === 'guest' ? 'bg-brand-blue text-white border-brand-blue' : 'bg-white text-gray-500 border-gray-100 hover:border-brand-blue/30'}`}
-                  onClick={async () => {
-                    await updateDoc(doc(db, 'users', user.uid), { role: 'guest' });
-                    window.location.reload();
-                  }}
+                  type="button"
+                  className={`py-4 rounded-2xl font-bold border-2 transition-all ${profileRole === 'guest' ? 'bg-brand-blue text-white border-brand-blue' : 'bg-white text-gray-500 border-gray-100 hover:border-brand-blue/30'}`}
+                  onClick={() => setProfileRole('guest')}
                 >
                   Guest
                 </button>
                 <button 
-                  className={`py-4 rounded-2xl font-bold border-2 transition-all ${userProfile?.role === 'host' ? 'bg-brand-blue text-white border-brand-blue' : 'bg-white text-gray-500 border-gray-100 hover:border-brand-blue/30'}`}
-                  onClick={async () => {
-                    await updateDoc(doc(db, 'users', user.uid), { role: 'host' });
-                    window.location.reload();
-                  }}
+                  type="button"
+                  className={`py-4 rounded-2xl font-bold border-2 transition-all ${profileRole === 'host' ? 'bg-brand-blue text-white border-brand-blue' : 'bg-white text-gray-500 border-gray-100 hover:border-brand-blue/30'}`}
+                  onClick={() => setProfileRole('host')}
                 >
                   Hôte
                 </button>
@@ -1030,8 +1095,12 @@ const UserDashboard = ({ user, userProfile }) => {
               </p>
             </div>
 
-            <button className="w-full bg-brand-blue text-white py-5 rounded-2xl font-bold mt-4 hover:opacity-90 transition-all shadow-xl shadow-brand-blue/20">
-              Enregistrer les modifications
+            <button 
+              onClick={handleSaveProfile}
+              disabled={isSaving}
+              className="w-full bg-brand-blue text-white py-5 rounded-2xl font-bold mt-4 hover:opacity-90 transition-all shadow-xl shadow-brand-blue/20 disabled:opacity-50"
+            >
+              {isSaving ? 'Enregistrement...' : 'Enregistrer les modifications'}
             </button>
           </div>
         </div>
@@ -1571,25 +1640,31 @@ function App() {
   const [bookingDetails, setBookingDetails] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Auth Listener
+  // Auth & Profile Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+    let unsubscribeProfile = null;
+    
+    const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (u) {
-        // Fetch user profile from Firestore
-        const userDoc = await getDoc(doc(db, 'users', u.uid));
-        if (userDoc.exists()) {
-          setUserProfile(userDoc.data());
-        } else {
-          // If profile doesn't exist, maybe open the profile completion step
-          // or just keep it null until they complete it via AuthModal
-          setUserProfile(null);
-        }
+        // Listen to user profile in real-time
+        unsubscribeProfile = onSnapshot(doc(db, 'users', u.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            setUserProfile(docSnap.data());
+          } else {
+            setUserProfile(null);
+          }
+        });
       } else {
         setUserProfile(null);
+        if (unsubscribeProfile) unsubscribeProfile();
       }
     });
-    return () => unsubscribe();
+    
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
+    };
   }, []);
 
   // Notifications Listener
