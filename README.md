@@ -23,4 +23,3 @@ Ce projet est prêt à être déployé sur **Vercel**.
 ```bash
 npm install
 npm run dev
-```
