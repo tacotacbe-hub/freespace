@@ -15,7 +15,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 
-export const MessageModal = ({ isOpen, onClose, space, user }) => {
+export const MessageModal = ({ isOpen, onClose, space, user, userProfile }) => {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -31,6 +31,8 @@ export const MessageModal = ({ isOpen, onClose, space, user }) => {
       const conversationId = `${participants[0]}_${participants[1]}_${space.id}`;
       const convRef = doc(db, 'conversations', conversationId);
       
+      const userName = userProfile?.firstName ? `${userProfile.firstName} ${userProfile.lastName || ''}` : user.email.split('@')[0];
+
       await setDoc(convRef, {
         lastMessage: message,
         updatedAt: serverTimestamp(),
@@ -40,7 +42,7 @@ export const MessageModal = ({ isOpen, onClose, space, user }) => {
         spaceId: space.id,
         hostId: space.hostId || 'system',
         hostName: space.host,
-        userName: user.email.split('@')[0]
+        userName: userName
       }, { merge: true });
 
       await addDoc(collection(db, 'conversations', conversationId, 'messages'), {

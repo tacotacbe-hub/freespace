@@ -96,7 +96,7 @@ const generateConventionPDF = (space, date) => {
 
 // --- SHARED COMPONENTS ---
 
-const Header = ({ user, onOpenAuth, unreadCount = 0 }) => {
+const Header = ({ onOpenAuth, user, userProfile, unreadCount }) => {
   const location = useLocation();
   const isHomePage = location.pathname === '/';
 
@@ -136,16 +136,24 @@ const Header = ({ user, onOpenAuth, unreadCount = 0 }) => {
         )}
         {user && (
           <div className="flex items-center gap-4">
-            <Link to="/dashboard" className="flex items-center gap-2 hover:text-brand-blue transition-colors">
+            <Link to="/dashboard" className="flex items-center gap-3 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-100 hover:border-brand-blue/20 transition-all group relative">
               <div className="relative">
-                <User size={18} className="text-brand-blue" />
+                <div className="w-8 h-8 bg-brand-emerald rounded-full flex items-center justify-center text-brand-blue font-bold text-xs overflow-hidden shadow-sm group-hover:shadow-md transition-all">
+                  {userProfile?.photoURL ? (
+                    <img src={userProfile.photoURL} alt="Profil" className="w-full h-full object-cover" />
+                  ) : (
+                    (userProfile?.firstName?.charAt(0) || user.email.charAt(0)).toUpperCase()
+                  )}
+                </div>
                 {unreadCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-white animate-pulse">
                     {unreadCount}
                   </span>
                 )}
               </div>
-              <span className="hidden sm:inline font-medium">{user.displayName || user.email.split('@')[0]}</span>
+              <span className="hidden sm:inline font-bold text-brand-blue text-sm">
+                {userProfile?.firstName ? `${userProfile.firstName} ${userProfile.lastName || ''}` : (user.displayName || user.email.split('@')[0])}
+              </span>
             </Link>
           </div>
         )}
@@ -846,13 +854,17 @@ const SpaceDetailPage = ({ spaces, user, onBook, onOpenAuth }) => {
 const UserDashboard = ({ user, userProfile }) => {
   const [receivedBookings, setReceivedBookings] = useState([]);
   const [myBookings, setMyBookings] = useState([]);
+  const [mySpaces, setMySpaces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('guest'); // 'guest', 'host', 'messages', or 'profile'
+  const [editingSpace, setEditingSpace] = useState(null);
+  const [activeTab, setActiveTab] = useState('guest');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   
   // Profile states
+  const [profileFirstName, setProfileFirstName] = useState(userProfile?.firstName || '');
+  const [profileLastName, setProfileLastName] = useState(userProfile?.lastName || '');
   const [profileBio, setProfileBio] = useState(userProfile?.bio || '');
   const [profileRole, setProfileRole] = useState(userProfile?.role || 'guest');
   const [isSaving, setIsSaving] = useState(false);
@@ -860,6 +872,8 @@ const UserDashboard = ({ user, userProfile }) => {
 
   useEffect(() => {
     if (userProfile) {
+      setProfileFirstName(userProfile.firstName || '');
+      setProfileLastName(userProfile.lastName || '');
       setProfileBio(userProfile.bio || '');
       setProfileRole(userProfile.role || 'guest');
     }
@@ -895,6 +909,8 @@ const UserDashboard = ({ user, userProfile }) => {
     setIsSaving(true);
     try {
       await setDoc(doc(db, 'users', user.uid), {
+        firstName: profileFirstName,
+        lastName: profileLastName,
         bio: profileBio,
         role: profileRole,
         email: user.email,
@@ -927,11 +943,51 @@ const UserDashboard = ({ user, userProfile }) => {
       setLoading(false);
     });
 
+    const qSpaces = query(collection(db, 'spaces'), where('hostId', '==', user.uid));
+    const unsubscribeSpaces = onSnapshot(qSpaces, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setMySpaces(data);
+    });
+
     return () => {
       unsubscribeHost();
       unsubscribeGuest();
+      unsubscribeSpaces();
     };
   }, [user]);
+
+  const handleDeleteSpace = async (spaceId) => {
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cet espace ? Cette action est irréversible.")) return;
+    try {
+      await deleteDoc(doc(db, 'spaces', spaceId));
+      alert("Espace supprimé.");
+    } catch (err) {
+      console.error(err);
+      alert("Erreur lors de la suppression.");
+    }
+  };
+
+  // Auto-repair missing coordinates for host spaces
+  useEffect(() => {
+    if (activeTab === 'host' && mySpaces.length > 0) {
+      mySpaces.forEach(async (space) => {
+        if (!space.lat || !space.lng) {
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(space.location + ", Belgique")}&limit=1&countrycodes=be`);
+            const data = await res.json();
+            if (data && data.length > 0) {
+              await updateDoc(doc(db, 'spaces', space.id), {
+                lat: parseFloat(data[0].lat),
+                lng: parseFloat(data[0].lon)
+              });
+            }
+          } catch (e) {
+            console.error("Repair geocoding failed", e);
+          }
+        }
+      });
+    }
+  }, [activeTab, mySpaces]);
 
   const handleConfirm = async (bookingId) => {
     try {
@@ -968,7 +1024,9 @@ const UserDashboard = ({ user, userProfile }) => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-6">
         <div>
           <h1 className="text-3xl font-bold text-brand-blue mb-2">Mon Espace FreeSpace</h1>
-          <p className="text-gray-500 font-medium">Bonjour, {user.email.split('@')[0]}</p>
+          <p className="text-gray-500 font-medium">
+            Bonjour, {userProfile?.firstName ? userProfile.firstName : user.email.split('@')[0]}
+          </p>
         </div>
         <div className="flex gap-2 bg-gray-100 p-1.5 rounded-2xl border border-gray-200">
           <button 
@@ -1031,7 +1089,7 @@ const UserDashboard = ({ user, userProfile }) => {
         </div>
       </div>
 
-      <AddSpaceModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} user={user} />
+      <AddSpaceModal isOpen={isAddModalOpen || !!editingSpace} onClose={() => { setIsAddModalOpen(false); setEditingSpace(null); }} user={user} userProfile={userProfile} editSpace={editingSpace} />
 
       {activeTab === 'profile' ? (
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8 max-w-2xl mx-auto">
@@ -1059,6 +1117,29 @@ const UserDashboard = ({ user, userProfile }) => {
               >
                 Changer la photo
               </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase">Prénom</label>
+                <input 
+                  type="text"
+                  className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-4 outline-none focus:border-brand-blue/30 transition-all"
+                  placeholder="Votre prénom"
+                  value={profileFirstName}
+                  onChange={(e) => setProfileFirstName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase">Nom</label>
+                <input 
+                  type="text"
+                  className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-4 outline-none focus:border-brand-blue/30 transition-all"
+                  placeholder="Votre nom"
+                  value={profileLastName}
+                  onChange={(e) => setProfileLastName(e.target.value)}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -1114,14 +1195,53 @@ const UserDashboard = ({ user, userProfile }) => {
               </div>
             </div>
             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-              <div className="text-gray-400 text-sm font-bold uppercase mb-2">Réservations reçues</div>
-              <div className="text-3xl font-bold text-brand-blue">{receivedBookings.length}</div>
+              <div className="text-gray-400 text-sm font-bold uppercase mb-2">Mes espaces</div>
+              <div className="text-3xl font-bold text-brand-blue">{mySpaces.length}</div>
             </div>
             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
               <div className="text-gray-400 text-sm font-bold uppercase mb-2">À confirmer</div>
               <div className="text-3xl font-bold text-brand-emerald">
                 {receivedBookings.filter(b => b.status === 'pending').length}
               </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden mb-12">
+            <div className="p-6 border-b border-gray-50 font-bold text-brand-blue flex items-center justify-between">
+              <span>Gestion de mes espaces</span>
+              <button 
+                onClick={() => setIsAddModalOpen(true)}
+                className="text-sm bg-brand-blue text-white px-4 py-2 rounded-xl flex items-center gap-2"
+              >
+                <Building2 size={16} /> Ajouter un espace
+              </button>
+            </div>
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {mySpaces.length === 0 ? (
+                <div className="col-span-full py-12 text-center text-gray-400">Vous n'avez pas encore publié d'espace.</div>
+              ) : (
+                mySpaces.map(space => (
+                  <div key={space.id} className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                    <img src={space.image} className="w-full h-32 object-cover rounded-xl mb-4" />
+                    <h4 className="font-bold text-brand-blue mb-1">{space.title}</h4>
+                    <p className="text-xs text-gray-500 mb-4">{space.location}</p>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => setEditingSpace(space)}
+                        className="flex-1 bg-white border border-gray-200 py-2 rounded-lg text-xs font-bold hover:bg-gray-100 transition-all"
+                      >
+                        Modifier
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteSpace(space.id)}
+                        className="flex-1 bg-red-50 text-red-500 py-2 rounded-lg text-xs font-bold hover:bg-red-100 transition-all"
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -1257,7 +1377,7 @@ const UserDashboard = ({ user, userProfile }) => {
 
 // --- ADD SPACE MODAL ---
 
-const AddSpaceModal = ({ isOpen, onClose, user }) => {
+const AddSpaceModal = ({ isOpen, onClose, user, userProfile, editSpace = null }) => {
   const [formData, setFormData] = useState({
     title: '',
     location: '',
@@ -1326,7 +1446,7 @@ const AddSpaceModal = ({ isOpen, onClose, user }) => {
         ...formData,
         id: spaceId,
         price: Number(formData.price),
-        host: user.email.split('@')[0],
+        host: userProfile?.firstName ? `${userProfile.firstName} ${userProfile.lastName || ''}` : user.email.split('@')[0],
         hostEmail: user.email,
         hostId: user.uid,
         image: imageUrls[0], // Primary image
@@ -1739,7 +1859,7 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-white overflow-x-hidden">
-      <Header user={user} onOpenAuth={() => setIsAuthOpen(true)} unreadCount={unreadCount} />
+      <Header onOpenAuth={() => setIsAuthOpen(true)} user={user} userProfile={userProfile} unreadCount={unreadCount} />
       
       <AnimatePresence mode="wait">
         <Routes>
