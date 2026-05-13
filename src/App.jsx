@@ -108,7 +108,7 @@ const Header = ({ onOpenAuth, user, userProfile, unreadCount }) => {
           <div className="w-10 h-10 bg-brand-blue rounded-xl flex items-center justify-center">
             <span className="text-white font-bold text-xl">FS</span>
           </div>
-          <span className="text-2xl font-bold text-brand-blue tracking-tight">FreeSpace</span>
+          <span className="text-2xl font-bold text-brand-blue tracking-tight">FreeSpace V2</span>
         </Link>
       </div>
       
