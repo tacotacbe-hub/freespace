@@ -1,3 +1,4 @@
+// Trigger Vercel rebuild - 2026-05-13
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Routes, Route, Link, useParams, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, MapPin, Calendar, CheckCircle, Leaf, Euro, Zap, Menu, User, Filter, ShieldCheck, ArrowLeft, ArrowRight, Share2, Heart, Info, Clock, Building2, Users, X, Map as MapIcon, Grid, LogOut, Mail, Lock, Columns, ZoomIn } from 'lucide-react';
