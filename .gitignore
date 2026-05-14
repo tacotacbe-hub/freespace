@@ -26,3 +26,4 @@ dist-ssr
 *.local
 .firebase
 .vercel
+.env*.local

@@ -1,7 +1,7 @@
 // Trigger Vercel rebuild - 2026-05-13
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Routes, Route, Link, useParams, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, MapPin, Calendar, CheckCircle, Leaf, Euro, Zap, Menu, User, Filter, ShieldCheck, ArrowLeft, ArrowRight, Share2, Heart, Info, Clock, Building2, Users, X, Map as MapIcon, Grid, LogOut, Mail, Lock, Columns, ZoomIn } from 'lucide-react';
+import { Search, MapPin, Calendar, CheckCircle, Leaf, Euro, Zap, Menu, User, Filter, ShieldCheck, ArrowLeft, ArrowRight, Share2, Heart, Info, Clock, Building2, Users, X, Map as MapIcon, Grid, LogOut, Mail, Lock, Columns, ZoomIn, UserCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -643,6 +643,9 @@ const SpaceDetailPage = ({ spaces, user, onBook, onOpenAuth }) => {
                   <span className="flex items-center gap-1"><Building2 size={16}/> {space.type}</span>
                   <span className="flex items-center gap-1"><Users size={16}/> {space.capacity}</span>
                   <span className="flex items-center gap-1"><Zap size={16}/> {space.area}</span>
+                  {space.targetAudience && (
+                    <span className="flex items-center gap-1"><UserCheck size={16}/> {space.targetAudience}</span>
+                  )}
                 </div>
               </div>
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center border-2 border-brand-emerald">
@@ -1386,7 +1389,8 @@ const AddSpaceModal = ({ isOpen, onClose, user, userProfile, editSpace = null })
     type: [], // Now an array
     description: '',
     area: '',
-    capacity: ''
+    capacity: '',
+    targetAudience: 'Tous publics'
   });
   const [imageFiles, setImageFiles] = useState([]); // Multiple files
   const [loading, setLoading] = useState(false);
@@ -1459,7 +1463,7 @@ const AddSpaceModal = ({ isOpen, onClose, user, userProfile, editSpace = null })
       onClose();
       alert("Espace publié avec succès !");
       // Reset form
-      setFormData({ title: '', location: '', price: '', type: [], description: '', area: '', capacity: '' });
+      setFormData({ title: '', location: '', price: '', type: [], description: '', area: '', capacity: '', targetAudience: 'Tous publics' });
       setImageFiles([]);
       setPreviews([]);
     } catch (err) {
@@ -1555,6 +1559,19 @@ const AddSpaceModal = ({ isOpen, onClose, user, userProfile, editSpace = null })
               onChange={(e) => setFormData({...formData, area: e.target.value})}
               placeholder="Ex: 25m²"
             />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-gray-400 uppercase">Public cible</label>
+            <select 
+              className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-4 outline-none focus:border-brand-blue/30 transition-all appearance-none"
+              value={formData.targetAudience}
+              onChange={(e) => setFormData({...formData, targetAudience: e.target.value})}
+            >
+              <option value="Tous publics">Tous publics</option>
+              <option value="Professionnels">Professionnels</option>
+              <option value="Privés">Privés</option>
+            </select>
           </div>
 
           <div className="space-y-1 md:col-span-2">
